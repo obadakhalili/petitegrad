@@ -3,7 +3,7 @@ import numpy as np
 
 class Tensor:
     def __init__(self, nparray):
-        assert isinstance(nparray, np.ndarray), "data must be np.ndarray"
+        assert isinstance(nparray, np.ndarray)
         self.data = nparray
 
     def transpose(self):
@@ -30,4 +30,9 @@ class Tensor:
     def categorical_crossentropy(self, tensor):
         assert isinstance(tensor, Tensor)
         probs = self.softmax()
-        return Tensor(-np.sum(tensor.data * np.log(probs.data), axis=1))
+        return Tensor(
+            -np.sum(tensor.data * np.log(probs.data), axis=1).mean(keepdims=True)
+        )
+
+    def backward(self):
+        pass

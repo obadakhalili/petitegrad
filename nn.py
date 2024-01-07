@@ -56,6 +56,6 @@ if __name__ == "__main__":
 
     net = PetiteNet(input_size, output_size)
     output = net.forward(X_batch)
-    loss = output.categorical_crossentropy(y_batch)
+    loss = output.mean_squared_error(y_batch)
 
     loss.backward()

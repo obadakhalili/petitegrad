@@ -34,5 +34,11 @@ class Tensor:
             -np.sum(tensor.data * np.log(probs.data), axis=1).mean(keepdims=True)
         )
 
+    def mean_squared_error(self, tensor):
+        assert isinstance(tensor, Tensor)
+        return Tensor(
+            (np.square(self.data - tensor.data) / 2).sum(axis=1).mean(keepdims=True)
+        )
+
     def backward(self):
         pass

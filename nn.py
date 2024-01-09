@@ -2,30 +2,35 @@ from petitegrad.tensor import Tensor
 from mnist import MNIST
 import numpy as np
 
-# np.random.seed(1337)
-
 
 class PetiteNet:
     def __init__(self, input_size, output_size):
-        h1_size = 128
+        h1_size = 10
         h2_size = 64
+
         self.w1 = Tensor(np.random.randn(input_size, h1_size))
-        self.b1 = Tensor(np.random.randn(h1_size))
+        self.b1 = Tensor(np.random.rand(h1_size))
         self.w2 = Tensor(np.random.randn(h1_size, h2_size))
-        self.b2 = Tensor(np.random.randn(h2_size))
+        self.b2 = Tensor(np.random.rand(h2_size))
         self.w3 = Tensor(np.random.randn(h2_size, output_size))
-        self.b3 = Tensor(np.random.randn(output_size))
+        self.b3 = Tensor(np.random.rand(output_size))
+
+        self.params = [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3]
 
     def forward(self, X):
+        assert isinstance(X, Tensor)
+        assert X.data.ndim == 2
+
         return (
-            X.mul(self.w1)
+            X.matmul(self.w1)
             .add(self.b1)
             .relu()
-            .mul(self.w2)
+            .matmul(self.w2)
             .add(self.b2)
             .relu()
-            .mul(self.w3)
+            .matmul(self.w3)
             .add(self.b3)
+            .sigmoid()
         )
 
 
@@ -47,15 +52,33 @@ if __name__ == "__main__":
     print("Fetching MNIST data...")
     X_train, y_train, X_test, y_test = fetch_mnist()
 
+    X_test = Tensor(X_test)
+
     input_size = X_train.data.shape[1]
     output_size = 10
+    net = PetiteNet(input_size, output_size)
 
     batch_size = 64
-    X_batch = Tensor(X_train[:batch_size])
-    y_batch = Tensor(y_train[:batch_size])
+    for epoch in range(1000):
+        batches_indices = np.arange(len(X_train))
+        np.random.shuffle(batches_indices)
 
-    net = PetiteNet(input_size, output_size)
-    output = net.forward(X_batch)
-    loss = output.mean_squared_error(y_batch)
+        for batch_indices in [
+            batches_indices[batch_idx : batch_idx + batch_size]
+            for batch_idx in range(0, len(batches_indices), batch_size)
+        ]:
+            X_batch = Tensor(X_train[batch_indices])
+            y_batch = Tensor(y_train[batch_indices])
 
-    loss.backward()
+            output = net.forward(X_batch)
+            loss = output.mean_squared_error(y_batch)
+
+            loss.backward()
+
+            for p in net.params:
+                p.data -= 0.01 * p.grad
+
+        if epoch % 10 == 0:
+            predictions = net.forward(X_test)
+            accuracy = (predictions.data.argmax(axis=1) == y_test.argmax(axis=1)).mean()
+            print(f"Epoch {epoch}: accuracy = {accuracy}")

@@ -22,16 +22,17 @@ class PetiteNet:
         assert X.data.ndim == 2
         assert X.data.shape[1] == self.w1.data.shape[0]
 
+        # TODO: using any non-linearity other than sigmoid makes the score plummet!
         return (
             X.mm(self.w1)
             .add(self.b1)
-            .relu()
+            .sigmoid()
             .mm(self.w2)
             .add(self.b2)
-            .relu()
+            .sigmoid()
             .mm(self.w3)
             .add(self.b3)
-            .tanh()
+            .sigmoid()
         )
 
 
@@ -60,22 +61,27 @@ if __name__ == "__main__":
     net = PetiteNet(input_size, output_size)
 
     batch_size = 64
-    for epoch in range(1, 101):
-        batch_indices = np.random.randint(0, X_train.shape[0], batch_size)
+    for epoch in range(1, 51):
+        batches_indices = np.random.permutation(len(X_train))
 
-        X_batch = Tensor(X_train[batch_indices])
-        y_batch = Tensor(y_train[batch_indices])
+        # TODO: using only a sample in each epoch should work like in other frameworks, without having to use the full dataset to get a good score
+        for batch_indices in [
+            batches_indices[batch_idx : batch_idx + batch_size]
+            for batch_idx in range(0, len(batches_indices), batch_size)
+        ]:
+            X_batch = Tensor(X_train[batch_indices])
+            y_batch = Tensor(y_train[batch_indices])
 
-        output = net(X_batch)
-        loss = output.mse(y_batch)
+            output = net(X_batch)
+            loss = output.mse(y_batch)
 
-        loss.backward()
+            loss.backward()
 
-        for p in net.params:
-            p._data -= 0.01 * p.grad
-            p.zero_grad()
+            for p in net.params:
+                # TODO: using the below syntax to update the data isn't good
+                p._data -= 0.01 * p.grad
+                p.zero_grad()
 
-        if (epoch % 10 == 0) or (epoch == 1):
-            predictions = net(X_test).data
-            accuracy = (predictions.argmax(axis=1) == y_test.argmax(axis=1)).mean()
-            print(f"Epoch {epoch}: accuracy = {accuracy}")
+        predictions = net(X_test).data
+        accuracy = (predictions.argmax(axis=1) == y_test.argmax(axis=1)).mean()
+        print(f"Epoch {epoch}: accuracy = {accuracy}")

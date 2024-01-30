@@ -124,14 +124,6 @@ class Tensor:
 
         return out
 
-    def relu(self):
-        def grad_fn():
-            self._grad += (self.data > 0) * out.grad
-
-        out = Tensor(np.maximum(self.data, 0), grad_fn=grad_fn, src=[self])
-
-        return out
-
     def sigmoid(self):
         def grad_fn():
             self._grad += (1 - out.data) * out.data * out.grad
@@ -140,20 +132,11 @@ class Tensor:
 
         return out
 
-    def tanh(self):
-        def grad_fn():
-            self._grad += (1 - out.data**2) * out.grad
-
-        out = Tensor(np.tanh(self.data), grad_fn=grad_fn, src=[self])
-
-        return out
-
     def mse(self, t):
         assert isinstance(t, Tensor), "mse requires a tensor"
 
-        # TODO: this shouldn't be necessary. such methods should be implemented using tensor methods (such as `Tensor.sub`, and `Tensor.square`) instead of numpy methods,
-        # which will take care of broadcasting and their gradients.
-        # the same is true for other higher-order tensor methods
+        # TODO: this shouldn't be necessary. such ops should be implemented using tensor methods (such as `Tensor.sub` and `Tensor.square`) instead of numpy methods,
+        # which will take care of broadcasting and their gradients. the same is true for other higher-order tensor methods
         assert self.data.shape == t.data.shape, "mse requires tensors of the same shape"
 
         def grad_fn():

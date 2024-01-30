@@ -1,12 +1,12 @@
-from petitegrad.tensor import Tensor
+from petitegrad import Tensor
 from mnist import MNIST
 import numpy as np
 
 
 class PetiteNet:
     def __init__(self, input_size, output_size):
-        h1_size = 10
-        h2_size = 64
+        h1_size = 100
+        h2_size = 50
 
         self.w1 = Tensor(np.random.randn(input_size, h1_size))
         self.b1 = Tensor(np.random.rand(h1_size))
@@ -17,7 +17,7 @@ class PetiteNet:
 
         self.params = [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3]
 
-    def forward(self, X):
+    def __call__(self, X):
         assert isinstance(X, Tensor)
         assert X.data.ndim == 2
         assert X.data.shape[1] == self.w1.data.shape[0]
@@ -31,12 +31,12 @@ class PetiteNet:
             .relu()
             .mm(self.w3)
             .add(self.b3)
-            .sigmoid()
+            .tanh()
         )
 
 
 def fetch_mnist():
-    mndata = MNIST("./data")
+    mndata = MNIST("./data/mnist")
     mndata.gz = True
     mndata.load_training()
     mndata.load_testing()
@@ -55,32 +55,27 @@ if __name__ == "__main__":
 
     X_test = Tensor(X_test)
 
-    input_size = X_train.data.shape[1]
+    input_size = X_train.shape[1]
     output_size = 10
     net = PetiteNet(input_size, output_size)
 
     batch_size = 64
-    for epoch in range(100):
-        batches_indices = np.arange(len(X_train))
-        np.random.shuffle(batches_indices)
+    for epoch in range(1, 101):
+        batch_indices = np.random.randint(0, X_train.shape[0], batch_size)
 
-        for batch_indices in [
-            batches_indices[batch_idx : batch_idx + batch_size]
-            for batch_idx in range(0, len(batches_indices), batch_size)
-        ]:
-            X_batch = Tensor(X_train[batch_indices])
-            y_batch = Tensor(y_train[batch_indices])
+        X_batch = Tensor(X_train[batch_indices])
+        y_batch = Tensor(y_train[batch_indices])
 
-            output = net.forward(X_batch)
-            loss = output.mse(y_batch)
+        output = net(X_batch)
+        loss = output.mse(y_batch)
 
-            loss.backward()
+        loss.backward()
 
-            for p in net.params:
-                p._data -= 0.01 * p.grad
-                p.zero_grad()
+        for p in net.params:
+            p._data -= 0.01 * p.grad
+            p.zero_grad()
 
-        if epoch % 10 == 0:
-            predictions = net.forward(X_test)
-            accuracy = (predictions.data.argmax(axis=1) == y_test.argmax(axis=1)).mean()
+        if (epoch % 10 == 0) or (epoch == 1):
+            predictions = net(X_test).data
+            accuracy = (predictions.argmax(axis=1) == y_test.argmax(axis=1)).mean()
             print(f"Epoch {epoch}: accuracy = {accuracy}")

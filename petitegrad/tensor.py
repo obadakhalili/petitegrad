@@ -38,26 +38,11 @@ class Tensor:
     def grad(self):
         return self._grad
 
-    def mul(self, t):
-        if isinstance(t, (int, float)):
-            t = Tensor(t)
-
-        assert isinstance(t, Tensor), "mul requires a tensor or scalar"
-
-        def grad_fn():
-            a, b = (self, t) if self.data.ndim >= t.data.ndim else (t, self)
-
-            a._grad += b.data * out.grad
-            b._grad += (a.data * out.grad).sum(
-                axis=tuple(i for i in range(a.data.ndim - b.data.ndim))
-            )
-
-        out = Tensor(np.multiply(self.data, t.data), grad_fn=grad_fn, src=[self, t])
-
-        return out
+    def zero_grad(self):
+        self._grad = np.zeros_like(self._data, dtype=self._data.dtype)
 
     # TODO: support higher-order tensors in `.dot` method
-    # TODO: implement a single `.dot` method that supports all cases allowed by numpy, and remove `.mv` and `.mm`
+    # TODO: implement a single `.dot` method that supports all cases allowed by numpy, and remove `.mv` and `.mm`. simiar to tinygrad's `.dot` method
 
     def dot(self, t):
         assert isinstance(t, Tensor), "dot requires a tensor"
@@ -103,6 +88,24 @@ class Tensor:
 
         return out
 
+    def mul(self, t):
+        if isinstance(t, (int, float)):
+            t = Tensor(t)
+
+        assert isinstance(t, Tensor), "mul requires a tensor or scalar"
+
+        def grad_fn():
+            a, b = (self, t) if self.data.ndim >= t.data.ndim else (t, self)
+
+            a._grad += b.data * out.grad
+            b._grad += (a.data * out.grad).sum(
+                axis=tuple(i for i in range(a.data.ndim - b.data.ndim))
+            )
+
+        out = Tensor(np.multiply(self.data, t.data), grad_fn=grad_fn, src=[self, t])
+
+        return out
+
     def add(self, t):
         if isinstance(t, (int, float)):
             t = Tensor(t)
@@ -137,8 +140,21 @@ class Tensor:
 
         return out
 
+    def tanh(self):
+        def grad_fn():
+            self._grad += (1 - out.data**2) * out.grad
+
+        out = Tensor(np.tanh(self.data), grad_fn=grad_fn, src=[self])
+
+        return out
+
     def mse(self, t):
         assert isinstance(t, Tensor), "mse requires a tensor"
+
+        # TODO: this shouldn't be necessary. such methods should be implemented using tensor methods (such as `Tensor.sub`, and `Tensor.square`) instead of numpy methods,
+        # which will take care of broadcasting and their gradients.
+        # the same is true for other higher-order tensor methods
+        assert self.data.shape == t.data.shape, "mse requires tensors of the same shape"
 
         def grad_fn():
             self._grad += (self.data - t.data) * out.grad
@@ -150,6 +166,7 @@ class Tensor:
 
         return out
 
+    # TODO: should support numpy arguments, such as `axis`
     def sum(self):
         def grad_fn():
             self._grad += np.ones_like(self._data) * out._grad
@@ -157,9 +174,6 @@ class Tensor:
         out = Tensor(np.sum(self._data), grad_fn=grad_fn, src=[self])
 
         return out
-
-    def zero_grad(self):
-        self._grad = np.zeros_like(self._data, dtype=self._data.dtype)
 
     def backward(self):
         assert self.data.shape == (), "backward only supported for scalar outputs"

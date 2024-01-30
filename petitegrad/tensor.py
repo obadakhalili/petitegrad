@@ -103,6 +103,24 @@ class Tensor:
 
         return out
 
+    def add(self, t):
+        if isinstance(t, (int, float)):
+            t = Tensor(t)
+
+        assert isinstance(t, Tensor), "add requires a tensor or scalar"
+
+        def grad_fn():
+            a, b = (self, t) if self.data.ndim >= t.data.ndim else (t, self)
+
+            a._grad += out.grad
+            b._grad += out.grad.sum(
+                axis=tuple(i for i in range(a.data.ndim - b.data.ndim))
+            )
+
+        out = Tensor(np.add(self.data, t.data), grad_fn=grad_fn, src=[self, t])
+
+        return out
+
     def sum(self):
         def grad_fn():
             self._grad += np.ones_like(self._data) * out._grad
@@ -124,6 +142,6 @@ class Tensor:
                 for t in t._src:
                     backward(t)
 
-        self._grad = 1
+        self._grad = np.ones_like(self._data)
 
         backward(self)

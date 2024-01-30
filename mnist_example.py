@@ -20,15 +20,16 @@ class PetiteNet:
     def forward(self, X):
         assert isinstance(X, Tensor)
         assert X.data.ndim == 2
+        assert X.data.shape[1] == self.w1.data.shape[0]
 
         return (
-            X.matmul(self.w1)
+            X.mm(self.w1)
             .add(self.b1)
             .relu()
-            .matmul(self.w2)
+            .mm(self.w2)
             .add(self.b2)
             .relu()
-            .matmul(self.w3)
+            .mm(self.w3)
             .add(self.b3)
             .sigmoid()
         )
@@ -59,7 +60,7 @@ if __name__ == "__main__":
     net = PetiteNet(input_size, output_size)
 
     batch_size = 64
-    for epoch in range(1000):
+    for epoch in range(100):
         batches_indices = np.arange(len(X_train))
         np.random.shuffle(batches_indices)
 
@@ -71,12 +72,13 @@ if __name__ == "__main__":
             y_batch = Tensor(y_train[batch_indices])
 
             output = net.forward(X_batch)
-            loss = output.mean_squared_error(y_batch)
+            loss = output.mse(y_batch)
 
             loss.backward()
 
             for p in net.params:
-                p.data -= 0.01 * p.grad
+                p._data -= 0.01 * p.grad
+                p.zero_grad()
 
         if epoch % 10 == 0:
             predictions = net.forward(X_test)

@@ -121,6 +121,35 @@ class Tensor:
 
         return out
 
+    def relu(self):
+        def grad_fn():
+            self._grad += (self.data > 0) * out.grad
+
+        out = Tensor(np.maximum(self.data, 0), grad_fn=grad_fn, src=[self])
+
+        return out
+
+    def sigmoid(self):
+        def grad_fn():
+            self._grad += (1 - out.data) * out.data * out.grad
+
+        out = Tensor(1 / (1 + np.exp(-self.data)), grad_fn=grad_fn, src=[self])
+
+        return out
+
+    def mse(self, t):
+        assert isinstance(t, Tensor), "mse requires a tensor"
+
+        def grad_fn():
+            self._grad += (self.data - t.data) * out.grad
+            t._grad += (t.data - self.data) * out.grad
+
+        out = Tensor(
+            np.square(self.data - t.data).mean(), grad_fn=grad_fn, src=[self, t]
+        )
+
+        return out
+
     def sum(self):
         def grad_fn():
             self._grad += np.ones_like(self._data) * out._grad
@@ -128,6 +157,9 @@ class Tensor:
         out = Tensor(np.sum(self._data), grad_fn=grad_fn, src=[self])
 
         return out
+
+    def zero_grad(self):
+        self._grad = np.zeros_like(self._data, dtype=self._data.dtype)
 
     def backward(self):
         assert self.data.shape == (), "backward only supported for scalar outputs"

@@ -3,6 +3,8 @@ import numpy as np
 
 class Tensor:
     def __init__(self, data, requires_grad=False, grad_fn=None, src=None):
+        # TODO: rethink validation and sanitization
+
         if isinstance(data, (int, float)):
             data = np.array(data, dtype=np.float32)
 

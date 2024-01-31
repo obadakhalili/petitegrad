@@ -2,6 +2,8 @@ from petitegrad import Tensor
 from mnist import MNIST
 import numpy as np
 
+np.random.seed(42)
+
 
 class PetiteNet:
     def __init__(self, input_size, output_size):

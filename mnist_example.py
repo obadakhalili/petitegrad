@@ -8,12 +8,12 @@ class PetiteNet:
         h1_size = 100
         h2_size = 50
 
-        self.w1 = Tensor(np.random.randn(input_size, h1_size))
-        self.b1 = Tensor(np.random.rand(h1_size))
-        self.w2 = Tensor(np.random.randn(h1_size, h2_size))
-        self.b2 = Tensor(np.random.rand(h2_size))
-        self.w3 = Tensor(np.random.randn(h2_size, output_size))
-        self.b3 = Tensor(np.random.rand(output_size))
+        self.w1 = Tensor(np.random.randn(input_size, h1_size), requires_grad=True)
+        self.b1 = Tensor(np.random.rand(h1_size), requires_grad=True)
+        self.w2 = Tensor(np.random.randn(h1_size, h2_size), requires_grad=True)
+        self.b2 = Tensor(np.random.rand(h2_size), requires_grad=True)
+        self.w3 = Tensor(np.random.randn(h2_size, output_size), requires_grad=True)
+        self.b3 = Tensor(np.random.rand(output_size), requires_grad=True)
 
         self.params = [self.w1, self.b1, self.w2, self.b2, self.w3, self.b3]
 
@@ -79,8 +79,8 @@ if __name__ == "__main__":
 
             for p in net.params:
                 # TODO: using the below syntax to update the data isn't good
-                p._data -= 0.01 * p.grad
-                p.zero_grad()
+                p.data -= 0.01 * p.grad
+                p.reset_grad()
 
         predictions = net(X_test).data
         accuracy = (predictions.argmax(axis=1) == y_test.argmax(axis=1)).mean()

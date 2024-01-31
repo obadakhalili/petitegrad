@@ -2,7 +2,7 @@ import numpy as np
 
 
 class Tensor:
-    def __init__(self, data, grad_fn=None, src=None):
+    def __init__(self, data, requires_grad=False, grad_fn=None, src=None):
         if isinstance(data, (int, float)):
             data = np.array(data, dtype=np.float32)
 
@@ -18,6 +18,7 @@ class Tensor:
         assert isinstance(data, np.ndarray) and np.issubdtype(
             data.dtype, np.floating
         ), "data must be a scalar or numpy array of floats or integers"
+        assert isinstance(requires_grad, bool), "requires_grad must be a boolean"
         assert grad_fn is None or callable(grad_fn), "grad_fn must be callable"
         assert src is None or isinstance(src, list), "src must be a list of tensors"
         if src is not None:
@@ -25,38 +26,37 @@ class Tensor:
                 isinstance(t, Tensor) for t in src
             ), "src must be a list of tensors"
 
-        self._data = data
-        self._grad = np.zeros_like(data, dtype=data.dtype)
+        self.data = data
+        self.requires_grad = requires_grad
+        self.grad = None
         self._grad_fn = grad_fn
         self._src = src
 
-    @property
-    def data(self):
-        return self._data
-
-    @property
-    def grad(self):
-        return self._grad
-
-    def zero_grad(self):
-        self._grad = np.zeros_like(self._data, dtype=self._data.dtype)
+    def reset_grad(self):
+        self.grad = None
 
     def backward(self):
         assert self.data.shape == (), "backward only supported for scalar outputs"
 
-        def backward(t):
+        def backward(t, t_grad):
+            if t.requires_grad:
+                if t.grad is None:
+                    t.grad = t_grad
+                else:
+                    t.grad += t_grad
+
             if t._grad_fn is None:
                 return
 
-            t._grad_fn()
+            src_grads = t._grad_fn(t_grad)
 
             if t._src is not None:
-                for t in t._src:
-                    backward(t)
+                for t, t_grad in zip(t._src, src_grads):
+                    backward(t, t_grad)
 
-        self._grad = np.ones_like(self._data)
+        self_grad = np.ones_like(self.data)
 
-        backward(self)
+        backward(self, self_grad)
 
     def add(self, t):
         if isinstance(t, (int, float)):
@@ -64,9 +64,9 @@ class Tensor:
 
         assert isinstance(t, Tensor), "add requires a tensor or scalar"
 
-        def grad_fn():
-            self._grad += np.sum(
-                out.grad,
+        def grad_fn(out_grad):
+            self_grad = np.sum(
+                out_grad,
                 axis=tuple(
                     i
                     for i, axis in enumerate(
@@ -76,8 +76,8 @@ class Tensor:
                 ),
             ).reshape(self.data.shape)
 
-            t._grad += np.sum(
-                out.grad,
+            t_grad = np.sum(
+                out_grad,
                 axis=tuple(
                     i
                     for i, axis in enumerate(
@@ -86,6 +86,8 @@ class Tensor:
                     if axis == 1
                 ),
             ).reshape(t.data.shape)
+
+            return [self_grad, t_grad]
 
         out = Tensor(np.add(self.data, t.data), grad_fn=grad_fn, src=[self, t])
 
@@ -97,9 +99,9 @@ class Tensor:
 
         assert isinstance(t, Tensor), "mul requires a tensor or scalar"
 
-        def grad_fn():
-            self._grad += np.sum(
-                t.data * out.grad,
+        def grad_fn(out_grad):
+            self_grad = np.sum(
+                t.data * out_grad,
                 axis=tuple(
                     i
                     for i, axis in enumerate(
@@ -109,8 +111,8 @@ class Tensor:
                 ),
             ).reshape(self.data.shape)
 
-            t._grad += np.sum(
-                self.data * out.grad,
+            t_grad = np.sum(
+                self.data * out_grad,
                 axis=tuple(
                     i
                     for i, axis in enumerate(
@@ -119,6 +121,8 @@ class Tensor:
                     if axis == 1
                 ),
             ).reshape(t.data.shape)
+
+            return [self_grad, t_grad]
 
         out = Tensor(np.multiply(self.data, t.data), grad_fn=grad_fn, src=[self, t])
 
@@ -139,24 +143,27 @@ class Tensor:
             isinstance(i, int) and 0 <= i < self.data.ndim for i in axis
         ), "axes must be a tuple of integers between 0 and the number of dimensions of the tensor"
 
-        def grad_fn():
-            out_grad = out.grad.reshape(
+        def grad_fn(out_grad):
+            out_grad_reshape = out_grad.reshape(
                 tuple(
                     1 if i in axis else self.data.shape[i]
                     for i in range(self.data.ndim)
                 )
             )
-            self._grad += np.ones_like(self._data) * out_grad
+            self_grad = np.ones_like(self.data) * out_grad_reshape
 
-        out = Tensor(np.sum(self._data, axis=axis), grad_fn=grad_fn, src=[self])
+            return [self_grad]
+
+        out = Tensor(np.sum(self.data, axis=axis), grad_fn=grad_fn, src=[self])
 
         return out
 
     def reshape(self, shape):
         assert isinstance(shape, tuple), "shape must be a tuple"
 
-        def grad_fn():
-            self._grad += out.grad.reshape(self.data.shape)
+        def grad_fn(out_grad):
+            self_grad = out_grad.reshape(self.data.shape)
+            return [self_grad]
 
         out = Tensor(self.data.reshape(shape), grad_fn=grad_fn, src=[self])
 
@@ -195,8 +202,9 @@ class Tensor:
     # TODO: `.sigmoid` and `.mse` should be implemented using tensor methods instead of numpy methods
 
     def sigmoid(self):
-        def grad_fn():
-            self._grad += (1 - out.data) * out.data * out.grad
+        def grad_fn(out_grad):
+            self_grad = (1 - out.data) * out.data * out_grad
+            return [self_grad]
 
         out = Tensor(1 / (1 + np.exp(-self.data)), grad_fn=grad_fn, src=[self])
 
@@ -207,9 +215,11 @@ class Tensor:
         # TODO: this shouldn't be necessary when such ops are implemented using tensor methods
         assert self.data.shape == t.data.shape, "mse requires tensors of the same shape"
 
-        def grad_fn():
-            self._grad += (self.data - t.data) * out.grad
-            t._grad += (t.data - self.data) * out.grad
+        def grad_fn(out_grad):
+            self_grad = (self.data - t.data) * out_grad
+            t_grad = (t.data - self.data) * out_grad
+
+            return [self_grad, t_grad]
 
         out = Tensor(
             np.square(self.data - t.data).mean(), grad_fn=grad_fn, src=[self, t]
